@@ -128,6 +128,12 @@ the lines of /usr/lib/pythonX.Y/site-packages/).  If you need to control
 where the Python modules are installed, set the PY_PREFIX variable.
 (DESTDIR is respected for Python and C++.)
 
+官方提供方法
+```
+//
+./configure --with-openssl=/usr/local/opt/openssl --prefix=/usr/local/ --with-boost=/usr/local --with-libevent=/usr/local
+```
+
 Make thrift:
 
 	make
@@ -162,3 +168,5 @@ To run the cross-language test suite, please run:
 
 This will run a set of tests that use different language clients and
 servers.
+
+
