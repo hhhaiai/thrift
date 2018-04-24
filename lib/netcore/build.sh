@@ -22,25 +22,9 @@
 #exit if any command fails
 #set -e
 
-pushd Tests/Thrift.PublicInterfaces.Compile.Tests
-for file in *.thrift 
-do
-    ../../../../compiler/cpp/thrift  -gen netcore:wcf   -r  "$file"
-done
-../../../../compiler/cpp/thrift  -gen netcore:wcf   -r  ../../../../contrib/fb303/if/fb303.thrift
-../../../../compiler/cpp/thrift  -gen netcore:wcf   -r  ../../../../test/ThriftTest.thrift
-popd
-
+thrift --version
 dotnet --info
-
-dotnet restore
-
-# dotnet test ./test/TEST_PROJECT_NAME -c Release -f netcoreapp1.0
-
-# Instead, run directly with mono for the full .net version 
-dotnet build **/*/project.json -r win10-x64 
-dotnet build **/*/project.json -r osx.10.11-x64 
-dotnet build **/*/project.json -r ubuntu.16.04-x64 
+dotnet build 
 
 #revision=${TRAVIS_JOB_ID:=1}  
 #revision=$(printf "%04d" $revision) 

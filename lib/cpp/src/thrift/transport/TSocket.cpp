@@ -21,6 +21,9 @@
 
 #include <cstring>
 #include <sstream>
+#ifdef HAVE_SYS_IOCTL_H
+#include <sys/ioctl.h>
+#endif
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
@@ -63,11 +66,11 @@ inline SOCKOPT_CAST_T* cast_sockopt(T* v) {
   return reinterpret_cast<SOCKOPT_CAST_T*>(v);
 }
 
+using std::string;
+
 namespace apache {
 namespace thrift {
 namespace transport {
-
-using namespace std;
 
 /**
  * TSocket implementation.
@@ -141,7 +144,7 @@ TSocket::TSocket(THRIFT_SOCKET socket)
 #endif
 }
 
-TSocket::TSocket(THRIFT_SOCKET socket, boost::shared_ptr<THRIFT_SOCKET> interruptListener)
+TSocket::TSocket(THRIFT_SOCKET socket, stdcxx::shared_ptr<THRIFT_SOCKET> interruptListener)
   : port_(0),
     socket_(socket),
     peerPort_(0),
@@ -165,6 +168,26 @@ TSocket::TSocket(THRIFT_SOCKET socket, boost::shared_ptr<THRIFT_SOCKET> interrup
 
 TSocket::~TSocket() {
   close();
+}
+
+bool TSocket::hasPendingDataToRead() {
+  if (!isOpen()) {
+    return false;
+  }
+
+  int32_t retries = 0;
+  THRIFT_IOCTL_SOCKET_NUM_BYTES_TYPE numBytesAvailable;
+try_again:
+  int r = THRIFT_IOCTL_SOCKET(socket_, FIONREAD, &numBytesAvailable);
+  if (r == -1) {
+    int errno_copy = THRIFT_GET_SOCKET_ERROR;
+    if (errno_copy == THRIFT_EINTR && (retries++ < maxRecvRetries_)) {
+      goto try_again;
+    }
+    GlobalOutput.perror("TSocket::hasPendingDataToRead() THRIFT_IOCTL_SOCKET() " + getSocketInfo(), errno_copy);
+    throw TTransportException(TTransportException::UNKNOWN, "Unknown", errno_copy);
+  }
+  return numBytesAvailable > 0;
 }
 
 bool TSocket::isOpen() {
@@ -385,7 +408,11 @@ void TSocket::openConnection(struct addrinfo* res) {
 
 done:
   // Set socket back to normal mode (blocking)
-  THRIFT_FCNTL(socket_, THRIFT_F_SETFL, flags);
+  if (-1 == THRIFT_FCNTL(socket_, THRIFT_F_SETFL, flags)) {
+    int errno_copy = THRIFT_GET_SOCKET_ERROR;
+    GlobalOutput.perror("TSocket::open() THRIFT_FCNTL " + getSocketInfo(), errno_copy);
+    throw TTransportException(TTransportException::NOT_OPEN, "THRIFT_FCNTL() failed", errno_copy);
+  }
 
   if (path_.empty()) {
     setCachedAddress(res->ai_addr, static_cast<socklen_t>(res->ai_addrlen));
@@ -782,11 +809,15 @@ void TSocket::setMaxRecvRetries(int maxRecvRetries) {
 
 string TSocket::getSocketInfo() {
   std::ostringstream oss;
-  if (host_.empty() || port_ == 0) {
-    oss << "<Host: " << getPeerAddress();
-    oss << " Port: " << getPeerPort() << ">";
+  if (path_.empty()) {
+    if (host_.empty() || port_ == 0) {
+      oss << "<Host: " << getPeerAddress();
+      oss << " Port: " << getPeerPort() << ">";
+    } else {
+      oss << "<Host: " << host_ << " Port: " << port_ << ">";
+    }
   } else {
-    oss << "<Host: " << host_ << " Port: " << port_ << ">";
+    oss << "<Path: " << path_ << ">";
   }
   return oss.str();
 }

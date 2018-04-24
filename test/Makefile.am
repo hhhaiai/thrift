@@ -25,6 +25,11 @@ SUBDIRS += c_glib
 PRECROSS_TARGET += precross-c_glib
 endif
 
+if WITH_CL
+SUBDIRS += cl
+PRECROSS_TARGET += precross-cl
+endif
+
 if WITH_MONO
 SUBDIRS += csharp
 PRECROSS_TARGET += precross-csharp
@@ -110,6 +115,7 @@ EXTRA_DIST = \
 	crossrunner \
 	keys \
 	c_glib \
+	cl \
 	cpp \
 	dart \
 	erl \
@@ -128,6 +134,7 @@ EXTRA_DIST = \
 	BrokenConstants.thrift \
 	ConstantsDemo.thrift \
 	DebugProtoTest.thrift \
+	DoubleConstantsTest.thrift \
 	DenseLinkingTest.thrift \
 	DocTest.thrift \
 	EnumTest.thrift \
@@ -143,10 +150,12 @@ EXTRA_DIST = \
 	OptionalRequiredTest.thrift \
 	Recursive.thrift \
 	ReuseObjects.thrift \
+	EnumContainersTest.thrift \
 	SmallTest.thrift \
 	StressTest.thrift \
 	ThriftTest.thrift \
 	TypedefTest.thrift \
+	UnsafeTypes.thrift \
 	known_failures_Linux.json \
 	test.py \
 	tests.json \

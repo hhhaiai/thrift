@@ -22,7 +22,7 @@
 import sys
 try:
     from setuptools import setup, Extension
-except:
+except Exception:
     from distutils.core import setup, Extension
 
 from distutils.command.build_ext import build_ext
@@ -31,7 +31,10 @@ from distutils.errors import CCompilerError, DistutilsExecError, DistutilsPlatfo
 # Fix to build sdist under vagrant
 import os
 if 'vagrant' in str(os.environ):
-    del os.link
+    try:
+        del os.link
+    except AttributeError:
+        pass
 
 include_dirs = ['src']
 if sys.platform == 'win32':
@@ -120,6 +123,7 @@ def run_setup(with_binary):
           zip_safe=False,
           **extensions
           )
+
 
 try:
     with_binary = True

@@ -41,27 +41,28 @@ namespace Test
         public static int _clientID = -1;
         public delegate void TestLogDelegate(string msg, params object[] values);
 
-    public class TradeServerEventHandler : TServerEventHandler
-    {
-      public int callCount = 0;
-      public void preServe()
-      {
-        callCount++;
-      }
-      public Object createContext(Thrift.Protocol.TProtocol input, Thrift.Protocol.TProtocol output)
-      {
-        callCount++;
-        return null;
-      }
-      public void deleteContext(Object serverContext, Thrift.Protocol.TProtocol input, Thrift.Protocol.TProtocol output)
-      {
-        callCount++;
-      }
-      public void processContext(Object serverContext, Thrift.Transport.TTransport transport)
-      {
-        callCount++;
-      }
-    };
+        public class TradeServerEventHandler : TServerEventHandler
+        {
+            public int callCount = 0;
+            public void preServe()
+            {
+                callCount++;
+            }
+            public Object createContext(Thrift.Protocol.TProtocol input, Thrift.Protocol.TProtocol output)
+            {
+                callCount++;
+                return null;
+            }
+            public void deleteContext(Object serverContext, Thrift.Protocol.TProtocol input, Thrift.Protocol.TProtocol output)
+            {
+                callCount++;
+            }
+            public void processContext(Object serverContext, Thrift.Transport.TTransport transport)
+            {
+                callCount++;
+            }
+        };
+
 
         public class TestHandler : ThriftTest.Iface, Thrift.TControllingHandler
         {
@@ -454,7 +455,9 @@ namespace Test
                     if (useEncryption)
                     {
                         string certPath = "../keys/server.p12";
-                        trans = new TTLSServerSocket(port, 0, useBufferedSockets, new X509Certificate2(certPath, "thrift"), null, null, SslProtocols.Tls);
+                        trans = new TTLSServerSocket(port, 0, useBufferedSockets, new X509Certificate2(certPath, "thrift"), 
+                            null,
+                            null, SslProtocols.Tls);
                     }
                     else
                     {

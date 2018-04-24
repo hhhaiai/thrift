@@ -19,8 +19,6 @@
 
 include_directories(SYSTEM "${Boost_INCLUDE_DIRS}")
 
-add_definitions("-D__STDC_LIMIT_MACROS")
-
 if (WITH_DYN_LINK_TEST)
     add_definitions( -DBOOST_TEST_DYN_LINK )
 endif()
@@ -42,6 +40,10 @@ set(testgencpp_SOURCES
     gen-cpp/Recursive_types.h
     gen-cpp/ThriftTest_types.cpp
     gen-cpp/ThriftTest_types.h
+    gen-cpp/OneWayTest_types.cpp
+    gen-cpp/OneWayTest_types.h
+    gen-cpp/OneWayService.cpp
+    gen-cpp/OneWayService.h
     gen-cpp/TypedefTest_types.cpp
     gen-cpp/TypedefTest_types.h
     ThriftTest_extras.cpp
@@ -70,6 +72,7 @@ target_link_libraries(Benchmark testgencpp)
 
 set(UnitTest_SOURCES
     UnitTestMain.cpp
+    OneWayHTTPTest.cpp
     TMemoryBufferTest.cpp
     TBufferBaseTest.cpp
     Base64Test.cpp
@@ -298,7 +301,21 @@ target_link_libraries(TNonblockingServerTest
 LINK_AGAINST_THRIFT_LIBRARY(TNonblockingServerTest thrift)
 LINK_AGAINST_THRIFT_LIBRARY(TNonblockingServerTest thriftnb)
 add_test(NAME TNonblockingServerTest COMMAND TNonblockingServerTest)
-endif()
+
+if(OPENSSL_FOUND AND WITH_OPENSSL)
+  set(TNonblockingSSLServerTest_SOURCES TNonblockingSSLServerTest.cpp)
+  add_executable(TNonblockingSSLServerTest ${TNonblockingSSLServerTest_SOURCES})
+  include_directories(${LIBEVENT_INCLUDE_DIRS})
+  target_link_libraries(TNonblockingSSLServerTest
+    testgencpp_cob
+    ${LIBEVENT_LIBRARIES}
+    ${Boost_LIBRARIES}
+  )
+  LINK_AGAINST_THRIFT_LIBRARY(TNonblockingSSLServerTest thrift)
+  LINK_AGAINST_THRIFT_LIBRARY(TNonblockingSSLServerTest thriftnb)
+  add_test(NAME TNonblockingSSLServerTest COMMAND TNonblockingSSLServerTest -- "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/keys")
+endif(OPENSSL_FOUND AND WITH_OPENSSL)
+endif(WITH_LIBEVENT)
 
 if(OPENSSL_FOUND AND WITH_OPENSSL)
 add_executable(OpenSSLManualInitTest OpenSSLManualInitTest.cpp)
@@ -377,6 +394,10 @@ add_custom_command(OUTPUT gen-cpp/Service.cpp gen-cpp/StressTest_types.cpp
 
 add_custom_command(OUTPUT gen-cpp/SecondService.cpp gen-cpp/ThriftTest_constants.cpp gen-cpp/ThriftTest.cpp gen-cpp/ThriftTest_types.cpp gen-cpp/ThriftTest_types.h
     COMMAND ${THRIFT_COMPILER} --gen cpp ${PROJECT_SOURCE_DIR}/test/ThriftTest.thrift
+)
+
+add_custom_command(OUTPUT gen-cpp/OneWayService.cpp gen-cpp/OneWayTest_constants.cpp gen-cpp/OneWayTest_types.h gen-cpp/OneWayService.h gen-cpp/OneWayTest_constants.h gen-cpp/OneWayTest_types.cpp
+    COMMAND ${THRIFT_COMPILER} --gen cpp ${CMAKE_CURRENT_SOURCE_DIR}/OneWayTest.thrift
 )
 
 add_custom_command(OUTPUT gen-cpp/ChildService.cpp gen-cpp/ChildService.h gen-cpp/ParentService.cpp gen-cpp/ParentService.h gen-cpp/proc_types.cpp gen-cpp/proc_types.h

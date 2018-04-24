@@ -20,6 +20,7 @@
 package thrift
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -76,11 +77,33 @@ func (t *TMultiplexedProtocol) WriteMessageBegin(name string, typeId TMessageTyp
 }
 
 /*
-This is the non-context version for TProcessor.
+TMultiplexedProcessor is a TProcessor allowing
+a single TServer to provide multiple services.
 
-See description at file: multiplexed_processor.go
+To do so, you instantiate the processor and then register additional
+processors with it, as shown in the following example:
 
-Deprecated: use TMultiplexedProcessor2 for strong server programming.
+var processor = thrift.NewTMultiplexedProcessor()
+
+firstProcessor :=
+processor.RegisterProcessor("FirstService", firstProcessor)
+
+processor.registerProcessor(
+  "Calculator",
+  Calculator.NewCalculatorProcessor(&CalculatorHandler{}),
+)
+
+processor.registerProcessor(
+  "WeatherReport",
+  WeatherReport.NewWeatherReportProcessor(&WeatherReportHandler{}),
+)
+
+serverTransport, err := thrift.NewTServerSocketTimeout(addr, TIMEOUT)
+if err != nil {
+  t.Fatal("Unable to create server socket", err)
+}
+server := thrift.NewTSimpleServer2(processor, serverTransport)
+server.Serve();
 */
 
 type TMultiplexedProcessor struct {
@@ -105,7 +128,7 @@ func (t *TMultiplexedProcessor) RegisterProcessor(name string, processor TProces
 	t.serviceProcessorMap[name] = processor
 }
 
-func (t *TMultiplexedProcessor) Process(in, out TProtocol) (bool, TException) {
+func (t *TMultiplexedProcessor) Process(ctx context.Context, in, out TProtocol) (bool, TException) {
 	name, typeId, seqid, err := in.ReadMessageBegin()
 	if err != nil {
 		return false, err
@@ -118,7 +141,7 @@ func (t *TMultiplexedProcessor) Process(in, out TProtocol) (bool, TException) {
 	if len(v) != 2 {
 		if t.DefaultProcessor != nil {
 			smb := NewStoredMessageProtocol(in, name, typeId, seqid)
-			return t.DefaultProcessor.Process(smb, out)
+			return t.DefaultProcessor.Process(ctx, smb, out)
 		}
 		return false, fmt.Errorf("Service name not found in message name: %s.  Did you forget to use a TMultiplexProtocol in your client?", name)
 	}
@@ -127,7 +150,7 @@ func (t *TMultiplexedProcessor) Process(in, out TProtocol) (bool, TException) {
 		return false, fmt.Errorf("Service name not found: %s.  Did you forget to call registerProcessor()?", v[0])
 	}
 	smb := NewStoredMessageProtocol(in, v[1], typeId, seqid)
-	return actualProcessor.Process(smb, out)
+	return actualProcessor.Process(ctx, smb, out)
 }
 
 //Protocol that use stored message for ReadMessageBegin

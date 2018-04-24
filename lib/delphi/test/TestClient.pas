@@ -22,15 +22,22 @@ unit TestClient;
 {$I ../src/Thrift.Defines.inc}
 
 {.$DEFINE StressTest}   // activate to stress-test the server with frequent connects/disconnects
-{.$DEFINE PerfTest}     // activate to activate the performance test
+{.$DEFINE PerfTest}     // activate the performance test
+{$DEFINE Exceptions}    // activate the exceptions test (or disable while debugging)
+
+{$if CompilerVersion >= 28}
+{$DEFINE SupportsAsync}
+{$ifend}
 
 interface
 
 uses
   Windows, SysUtils, Classes, Math,
+  {$IFDEF SupportsAsync} System.Threading, {$ENDIF}
   DateUtils,
   Generics.Collections,
   TestConstants,
+  ConsoleHelper,
   Thrift,
   Thrift.Protocol.Compact,
   Thrift.Protocol.JSON,
@@ -39,8 +46,8 @@ uses
   Thrift.Transport,
   Thrift.Stream,
   Thrift.Test,
-  Thrift.Collections,
-  Thrift.Console;
+  Thrift.Utils,
+  Thrift.Collections;
 
 type
   TThreadConsole = class
@@ -64,6 +71,13 @@ type
     );
     TTestGroups = set of TTestGroup;
 
+    TTestSize = (
+      Empty,           // Edge case: the zero-length empty binary
+      Normal,          // Fairly small array of usual size (256 bytes)
+      ByteArrayTest,   // THRIFT-4454 Large writes/reads may cause range check errors in debug mode
+      PipeWriteLimit   // THRIFT-4372 Pipe write operations across a network are limited to 65,535 bytes per write.
+    );
+
   private
     FTransport : ITransport;
     FProtocol : IProtocol;
@@ -83,10 +97,17 @@ type
     function  CalculateExitCode : Byte;
 
     procedure ClientTest;
+    {$IFDEF SupportsAsync}
+    procedure ClientAsyncTest;
+    {$ENDIF}
+
     procedure JSONProtocolReadWriteTest;
-    function  PrepareBinaryData( aRandomDist : Boolean = FALSE) : TBytes;
+    function  PrepareBinaryData( aRandomDist : Boolean; aSize : TTestSize) : TBytes;
     {$IFDEF StressTest}
     procedure StressTest(const client : TThriftTest.Iface);
+    {$ENDIF}
+    {$IFDEF Win64}
+	procedure UseInterlockedExchangeAdd64;
     {$ENDIF}
   protected
     procedure Execute; override;
@@ -172,6 +193,7 @@ end;
 class function TTestClient.Execute(const args: array of string) : Byte;
 var
   i : Integer;
+  threadExitCode : Byte;
   host : string;
   port : Integer;
   sPipeName : string;
@@ -254,7 +276,7 @@ begin
         if      s = 'buffered' then Include( layered, trns_Buffered)
         else if s = 'framed'   then Include( layered, trns_Framed)
         else if s = 'http'     then endpoint := trns_Http
-        else if s = 'evhttp'   then endpoint := trns_AnonPipes
+        else if s = 'evhttp'   then endpoint := trns_EvHttp
         else InvalidArgs;
       end
       else if s = '--protocol' then begin
@@ -369,11 +391,13 @@ begin
 
     result := 0;
     for test := 0 to FNumThread - 1 do begin
-      result := result or threads[test].WaitFor;
+      threadExitCode := threads[test].WaitFor;
+      result := result or threadExitCode;
     end;
 
-    for test := 0 to FNumThread - 1
-    do threads[test].Free;
+    for test := 0 to FNumThread - 1 do begin
+      threads[test].Free;
+    end;
 
     Console.Write('Total time: ' + IntToStr( MilliSecondsBetween(Now, dtStart)));
 
@@ -450,6 +474,7 @@ var
   first_map : IThriftDictionary<TNumberz, IInsanity>;
   second_map : IThriftDictionary<TNumberz, IInsanity>;
   pair : TPair<TNumberz, TUserId>;
+  testsize : TTestSize;
 begin
   client := TThriftTest.TClient.Create( FProtocol);
   FTransport.Open;
@@ -458,6 +483,7 @@ begin
   StressTest( client);
   {$ENDIF StressTest}
 
+  {$IFDEF Exceptions}
   // in-depth exception test
   // (1) do we get an exception at all?
   // (2) do we get the right exception?
@@ -506,6 +532,7 @@ begin
     on e:TTransportException do Expect( FALSE, 'Unexpected : "'+e.ToString+'"');
     on e:Exception do Expect( FALSE, 'Unexpected exception "'+e.ClassName+'"');
   end;
+  {$ENDIF Exceptions}
 
 
   // simple things
@@ -520,6 +547,9 @@ begin
 
   s := client.testString('Test');
   Expect( s = 'Test', 'testString(''Test'') = "'+s+'"');
+
+  s := client.testString('');  // empty string
+  Expect( s = '', 'testString('''') = "'+s+'"');
 
   s := client.testString(HUGE_TEST_STRING);
   Expect( length(s) = length(HUGE_TEST_STRING),
@@ -536,16 +566,19 @@ begin
   i64 := client.testI64(-34359738368);
   Expect( i64 = -34359738368, 'testI64(-34359738368) = ' + IntToStr( i64));
 
-  binOut := PrepareBinaryData( TRUE);
-  Console.WriteLine('testBinary('+BytesToHex(binOut)+')');
-  try
-    binIn := client.testBinary(binOut);
-    Expect( Length(binOut) = Length(binIn), 'testBinary(): length '+IntToStr(Length(binOut))+' = '+IntToStr(Length(binIn)));
-    i32 := Min( Length(binOut), Length(binIn));
-    Expect( CompareMem( binOut, binIn, i32), 'testBinary('+BytesToHex(binOut)+') = '+BytesToHex(binIn));
-  except
-    on e:TApplicationException do Console.WriteLine('testBinary(): '+e.Message);
-    on e:Exception do Expect( FALSE, 'testBinary(): Unexpected exception "'+e.ClassName+'": '+e.Message);
+  // random binary small
+  for testsize := Low(TTestSize) to High(TTestSize) do begin
+    binOut := PrepareBinaryData( TRUE, testsize);
+    Console.WriteLine('testBinary('+BytesToHex(binOut)+')');
+    try
+      binIn := client.testBinary(binOut);
+      Expect( Length(binOut) = Length(binIn), 'testBinary(): length '+IntToStr(Length(binOut))+' = '+IntToStr(Length(binIn)));
+      i32 := Min( Length(binOut), Length(binIn));
+      Expect( CompareMem( binOut, binIn, i32), 'testBinary('+BytesToHex(binOut)+') = '+BytesToHex(binIn));
+    except
+      on e:TApplicationException do Console.WriteLine('testBinary(): '+e.Message);
+      on e:Exception do Expect( FALSE, 'testBinary(): Unexpected exception "'+e.ClassName+'": '+e.Message);
+    end;
   end;
 
   Console.WriteLine('testDouble(5.325098235)');
@@ -967,6 +1000,33 @@ begin
 end;
 
 
+{$IFDEF SupportsAsync}
+procedure TClientThread.ClientAsyncTest;
+var
+  client : TThriftTest.IAsync;
+  s : string;
+  i8 : ShortInt;
+begin
+  StartTestGroup( 'Async Tests', test_Unknown);
+  client := TThriftTest.TClient.Create( FProtocol);
+  FTransport.Open;
+
+  // oneway void functions
+  client.testOnewayAsync(1).Wait;
+  Expect( TRUE, 'Test Oneway(1)');  // success := no exception
+
+  // normal functions
+  s := client.testStringAsync(HUGE_TEST_STRING).Value;
+  Expect( length(s) = length(HUGE_TEST_STRING),
+          'testString( length(HUGE_TEST_STRING) = '+IntToStr(Length(HUGE_TEST_STRING))+') '
+         +'=> length(result) = '+IntToStr(Length(s)));
+
+  i8 := client.testByte(1).Value;
+  Expect( i8 = 1, 'testByte(1) = ' + IntToStr( i8 ));
+end;
+{$ENDIF}
+
+
 {$IFDEF StressTest}
 procedure TClientThread.StressTest(const client : TThriftTest.Iface);
 begin
@@ -987,31 +1047,47 @@ end;
 {$ENDIF}
 
 
-function TClientThread.PrepareBinaryData( aRandomDist : Boolean = FALSE) : TBytes;
-var i, nextPos : Integer;
+function TClientThread.PrepareBinaryData( aRandomDist : Boolean; aSize : TTestSize) : TBytes;
+var i : Integer;
 begin
-  SetLength( result, $100);
+  case aSize of
+    Empty          : SetLength( result, 0);
+    Normal         : SetLength( result, $100);
+    ByteArrayTest  : SetLength( result, SizeOf(TByteArray) + 128);
+    PipeWriteLimit : SetLength( result, 65535 + 128);
+  else
+    raise EArgumentException.Create('aSize');
+  end;
+
   ASSERT( Low(result) = 0);
+  if Length(result) = 0 then Exit;
 
   // linear distribution, unless random is requested
   if not aRandomDist then begin
     for i := Low(result) to High(result) do begin
-      result[i] := i;
+      result[i] := i mod $100;
     end;
     Exit;
   end;
 
   // random distribution of all 256 values
   FillChar( result[0], Length(result) * SizeOf(result[0]), $0);
-  i := 1;
-  while i < Length(result) do begin
-    nextPos := Byte( Random($100));
-    if result[nextPos] = 0 then begin  // unused?
-      result[nextPos] := i;
-      Inc(i);
-    end;
+  for i := Low(result) to High(result) do begin
+    result[i] := Byte( Random($100));
   end;
 end;
+
+
+{$IFDEF Win64}
+procedure TClientThread.UseInterlockedExchangeAdd64;
+var a,b : Int64;
+begin
+  a := 1;
+  b := 2;
+  Thrift.Utils.InterlockedExchangeAdd64( a,b);
+  Expect( a = 3, 'InterlockedExchangeAdd64');
+end;
+{$ENDIF}
 
 
 procedure TClientThread.JSONProtocolReadWriteTest;
@@ -1021,8 +1097,8 @@ procedure TClientThread.JSONProtocolReadWriteTest;
 // other clients or servers expect as the real JSON. This is beyond the scope of this test.
 var prot   : IProtocol;
     stm    : TStringStream;
-    list   : IList;
-    binary, binRead : TBytes;
+    list   : TThriftList;
+    binary, binRead, emptyBinary : TBytes;
     i,iErr : Integer;
 const
   TEST_SHORT   = ShortInt( $FE);
@@ -1044,7 +1120,8 @@ begin
     StartTestGroup( 'JsonProtocolTest', test_Unknown);
 
     // prepare binary data
-    binary := PrepareBinaryData( FALSE);
+    binary := PrepareBinaryData( FALSE, Normal);
+    SetLength( emptyBinary, 0); // empty binary data block
 
     // output setup
     prot := TJSONProtocolImpl.Create(
@@ -1052,7 +1129,8 @@ begin
                 nil, TThriftStreamAdapterDelphi.Create( stm, FALSE)));
 
     // write
-    prot.WriteListBegin( TListImpl.Create( TType.String_, 9));
+    Init( list, TType.String_, 9);
+    prot.WriteListBegin( list);
     prot.WriteBool( TRUE);
     prot.WriteBool( FALSE);
     prot.WriteByte( TEST_SHORT);
@@ -1062,6 +1140,8 @@ begin
     prot.WriteDouble( TEST_DOUBLE);
     prot.WriteString( TEST_STRING);
     prot.WriteBinary( binary);
+    prot.WriteString( '');  // empty string
+    prot.WriteBinary( emptyBinary); // empty binary data block
     prot.WriteListEnd;
 
     // input setup
@@ -1084,6 +1164,8 @@ begin
     Expect( abs(prot.ReadDouble-TEST_DOUBLE) < abs(DELTA_DOUBLE), 'WriteDouble/ReadDouble');
     Expect( prot.ReadString = TEST_STRING, 'WriteString/ReadString');
     binRead := prot.ReadBinary;
+    Expect( Length(prot.ReadString) = 0, 'WriteString/ReadString (empty string)');
+    Expect( Length(prot.ReadBinary) = 0, 'empty WriteBinary/ReadBinary (empty data block)');
     prot.ReadListEnd;
 
     // test binary data
@@ -1249,10 +1331,17 @@ var
 begin
   // perform all tests
   try
+    {$IFDEF Win64}  
+    UseInterlockedExchangeAdd64;
+    {$ENDIF}
     JSONProtocolReadWriteTest;
+	
     for i := 0 to FNumIteration - 1 do
     begin
       ClientTest;
+      {$IFDEF SupportsAsync}
+      ClientAsyncTest;
+      {$ENDIF}
     end;
   except
     on e:Exception do Expect( FALSE, 'unexpected exception: "'+e.message+'"');

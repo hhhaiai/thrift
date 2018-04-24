@@ -19,50 +19,23 @@
 
 SUBDIRS = . 
 
-THRIFT = $(top_builddir)/compiler/cpp/thrift
+all-local:
+	$(DOTNETCORE) build
 
-GENDIR = ThriftTest/gen-netcore
-
-# Due to a known issue with "dotnet restore" the Thrift.dll dependency cannot be resolved from cmdline.
-# The problem does NOT affect Visual Studio builds, only cmdline. 
-# - For details see https://github.com/dotnet/cli/issues/3199 and related tickets.
-# - Workaround is to temporarily copy the Thrift project into the solution
-COPYCMD = cp  -u -p -r
-	
-
-THRIFTCODE = \
-			ThriftTest/TestClient.cs \
-			ThriftTest/TestServer.cs \
-			ThriftTest/Properties/AssemblyInfo.cs \
-			ThriftTest/Program.cs 
-
-all-local: \
-	ThriftTest.exe
-
-ThriftTest.exe: $(THRIFTCODE)
-	$(MKDIR_P) $(GENDIR)
-	$(THRIFT)  -gen netcore:wcf   -r  -out $(GENDIR)  $(top_srcdir)/test/ThriftTest.thrift
-	$(MKDIR_P) ./Thrift
-	$(COPYCMD)  $(top_srcdir)/lib/netcore/Thrift/*  ./Thrift
-	$(DOTNETCORE) --info
-	$(DOTNETCORE) restore
-	$(DOTNETCORE) build **/*/project.json -r win10-x64 
-	$(DOTNETCORE) build **/*/project.json -r osx.10.11-x64 
-	$(DOTNETCORE) build **/*/project.json -r ubuntu.16.04-x64 
+precross:
+	$(DOTNETCORE) build
 
 clean-local:
-	$(RM) ThriftTest.exe
-	$(RM) -r $(GENDIR)
-	$(RM) -r ThriftTest/bin
-	$(RM) -r ThriftTest/obj
-	$(RM) -r Thrift
+	$(RM) -r Client/bin
+	$(RM) -r Server/bin
+	$(RM) -r Client/obj
+	$(RM) -r Server/obj
+	$(RM) -r ThriftTest/ThriftTest
 
 EXTRA_DIST = \
-			 $(THRIFTCODE) \
-			 global.json \
-			 ThriftTest/project.json \
-			 ThriftTest/ThriftTest.sln \
-			 ThriftTest/ThriftTest.xproj \
-			 build.cmd \
-			 build.sh
-			 
+	Client \
+	README.md \
+	Server \
+	ThriftTest.sln \
+	build.cmd \
+	build.sh

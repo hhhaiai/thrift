@@ -125,26 +125,38 @@ func (p *TSimpleServer) Listen() error {
 	return p.serverTransport.Listen()
 }
 
+func (p *TSimpleServer) innerAccept() (int32, error) {
+	client, err := p.serverTransport.Accept()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	closed := atomic.LoadInt32(&p.closed)
+	if closed != 0 {
+		return closed, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if client != nil {
+		p.wg.Add(1)
+		go func() {
+			defer p.wg.Done()
+			if err := p.processRequests(client); err != nil {
+				log.Println("error processing request:", err)
+			}
+		}()
+	}
+	return 0, nil
+}
+
 func (p *TSimpleServer) AcceptLoop() error {
 	for {
-		client, err := p.serverTransport.Accept()
-		p.mu.Lock()
-		if atomic.LoadInt32(&p.closed) != 0 {
-			return nil
-		}
+		closed, err := p.innerAccept()
 		if err != nil {
 			return err
 		}
-		if client != nil {
-			p.wg.Add(1)
-			go func() {
-				defer p.wg.Done()
-				if err := p.processRequests(client); err != nil {
-					log.Println("error processing request:", err)
-				}
-			}()
+		if closed != 0 {
+			return nil
 		}
-		p.mu.Unlock()
 	}
 }
 
@@ -198,7 +210,7 @@ func (p *TSimpleServer) processRequests(client TTransport) error {
 			return nil
 		}
 
-		ok, err := processor.Process(inputProtocol, outputProtocol)
+		ok, err := processor.Process(defaultCtx, inputProtocol, outputProtocol)
 		if err, ok := err.(TTransportException); ok && err.TypeId() == END_OF_FILE {
 			return nil
 		} else if err != nil {

@@ -19,64 +19,24 @@
 
 SUBDIRS = . 
 
-THRIFT = $(top_builddir)/compiler/cpp/thrift
-
-GENDIR = Interfaces/gen-netcore
-
-# Due to a known issue with "dotnet restore" the Thrift.dll dependency cannot be resolved from cmdline.
-# The problem does NOT affect Visual Studio builds, only cmdline. 
-# - For details see https://github.com/dotnet/cli/issues/3199 and related tickets.
-# - Workaround is to temporarily copy the Thrift project into the solution
-COPYCMD = cp  -u -p -r
-	
-
-THRIFTCODE = \
-			Interfaces/Properties/AssemblyInfo.cs \
-			Client/Properties/AssemblyInfo.cs \
-			Client/Program.cs \
-			Server/Properties/AssemblyInfo.cs \
-			Server/Program.cs 
-
-all-local: \
-	Client.exe
-
-Client.exe: $(THRIFTCODE)
-	$(MKDIR_P) $(GENDIR)
-	$(THRIFT)  -gen netcore:wcf   -r  -out $(GENDIR)  $(top_srcdir)/tutorial/tutorial.thrift
-	$(MKDIR_P) ./Thrift
-	$(COPYCMD)  $(top_srcdir)/lib/netcore/Thrift/*  ./Thrift
-	$(DOTNETCORE) --info
-	$(DOTNETCORE) restore
-	$(DOTNETCORE) build **/*/project.json -r win10-x64 
-	$(DOTNETCORE) build **/*/project.json -r osx.10.11-x64 
-	$(DOTNETCORE) build **/*/project.json -r ubuntu.16.04-x64 
+all-local:
+	$(DOTNETCORE) build
 
 clean-local:
-	$(RM) Client.exe
-	$(RM) Server.exe
 	$(RM) Interfaces.dll
-	$(RM) -r $(GENDIR)
 	$(RM) -r Client/bin
 	$(RM) -r Client/obj
 	$(RM) -r Server/bin
 	$(RM) -r Server/obj
 	$(RM) -r Interfaces/bin
 	$(RM) -r Interfaces/obj
-	$(RM) -r Thrift
 
 EXTRA_DIST = \
-			 $(THRIFTCODE) \
-			 global.json \
-			 Tutorial.sln \
-			 Interfaces/project.json \
-			 Interfaces/Interfaces.xproj \
-			 Server/project.json \
-			 Server/Server.xproj \
-			 Server/ThriftTest.pfx \
-			 Client/project.json \
-			 Client/Client.xproj \
-			 Client/ThriftTest.pfx \
-			 build.cmd \
-			 build.sh \
-			 README.md
+	Client \
+	Interfaces \
+	README.md \
+	Server \
+	Tutorial.sln \
+	build.cmd \
+	build.sh
 			 

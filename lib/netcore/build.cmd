@@ -17,20 +17,11 @@ rem  * KIND, either express or implied. See the License for the
 rem  * specific language governing permissions and limitations
 rem  * under the License.
 rem  */
+
 setlocal
 
-pushd Tests\Thrift.PublicInterfaces.Compile.Tests
-for %%a in (*.thrift) do thrift  -gen netcore:wcf   -r  %%a
-thrift  -gen netcore:wcf   -r  ..\..\..\..\contrib/fb303/if/fb303.thrift
-thrift  -gen netcore:wcf   -r  ..\..\..\..\test/ThriftTest.thrift
-popd
-
+thrift -version
 dotnet --info
-
-dotnet restore
-
-dotnet build **/*/project.json -r win10-x64 
-dotnet build **/*/project.json -r osx.10.11-x64 
-dotnet build **/*/project.json -r ubuntu.16.04-x64 
+dotnet build 
 
 :eof

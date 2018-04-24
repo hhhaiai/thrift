@@ -511,8 +511,8 @@ void t_csharp_generator::print_const_def_value(std::ofstream& out,
   if (type->is_struct() || type->is_xception()) {
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
     vector<t_field*>::const_iterator f_iter;
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
-    map<t_const_value*, t_const_value*>::const_iterator v_iter;
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
+    map<t_const_value*, t_const_value*, t_const_value::value_compare>::const_iterator v_iter;
     prepare_member_name_mapping((t_struct*)type);
     for (v_iter = val.begin(); v_iter != val.end(); ++v_iter) {
       t_field* field = NULL;
@@ -532,8 +532,8 @@ void t_csharp_generator::print_const_def_value(std::ofstream& out,
   } else if (type->is_map()) {
     t_type* ktype = ((t_map*)type)->get_key_type();
     t_type* vtype = ((t_map*)type)->get_val_type();
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
-    map<t_const_value*, t_const_value*>::const_iterator v_iter;
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
+    map<t_const_value*, t_const_value*, t_const_value::value_compare>::const_iterator v_iter;
     for (v_iter = val.begin(); v_iter != val.end(); ++v_iter) {
       string key = render_const_value(out, name, ktype, v_iter->first);
       string val = render_const_value(out, name, vtype, v_iter->second);
@@ -843,7 +843,7 @@ void t_csharp_generator::generate_csharp_struct_definition(ofstream& out,
         } else {
           out << ", ";
         }
-        out << type_name((*m_iter)->get_type()) << " " << (*m_iter)->get_name();
+        out << type_name((*m_iter)->get_type()) << " " << normalize_name((*m_iter)->get_name());
       }
     }
     out << ") : this() {" << endl;
@@ -851,7 +851,7 @@ void t_csharp_generator::generate_csharp_struct_definition(ofstream& out,
 
     for (m_iter = members.begin(); m_iter != members.end(); ++m_iter) {
       if (field_is_required((*m_iter))) {
-        indent(out) << "this." << prop_name((*m_iter)) << " = " << (*m_iter)->get_name() << ";"
+        indent(out) << "this." << prop_name((*m_iter)) << " = " << normalize_name((*m_iter)->get_name()) << ";"
                     << endl;
       }
     }
@@ -988,7 +988,7 @@ void t_csharp_generator::generate_csharp_struct_reader(ofstream& out, t_struct* 
       indent_up();
       out << indent()
           << "throw new TProtocolException(TProtocolException.INVALID_DATA, "
-          << "\"required field " << prop_name((*f_iter)) << " not set\");" 
+          << "\"required field " << prop_name((*f_iter)) << " not set\");"
           << endl;
       indent_down();
     }
@@ -2820,6 +2820,8 @@ void t_csharp_generator::generate_csharp_property(ofstream& out,
       }
       if (ttype->is_base_type()) {
         use_nullable = ((t_base_type*)ttype)->get_base() != t_base_type::TYPE_STRING;
+      } else if (ttype->is_enum()) {
+        use_nullable = true;
       }
     }
     indent(out) << "return " << fieldPrefix + tfield->get_name() << ";" << endl;
@@ -2907,6 +2909,7 @@ void t_csharp_generator::prepare_member_name_mapping(void* scope,
                                                      const string& structname) {
   // begin new scope
   member_mapping_scope dummy;
+  dummy.scope_member = 0;
   member_mapping_scopes.push_back(dummy);
   member_mapping_scope& active = member_mapping_scopes.back();
   active.scope_member = scope;

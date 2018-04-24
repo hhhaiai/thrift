@@ -62,6 +62,7 @@ class Worker(threading.Thread):
                 logger.exception("Exception while processing request", exc_info=True)
                 callback(False, b'')
 
+
 WAIT_LEN = 0
 WAIT_MESSAGE = 1
 WAIT_PROCESS = 2
@@ -173,7 +174,7 @@ class Connection(object):
             self._wbuf = b''
             self.len = 0
         else:
-            self._wbuf = self.message[sent:]
+            self._wbuf = self._wbuf[sent:]
 
     @locked
     def ready(self, all_ok, message):

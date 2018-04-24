@@ -56,6 +56,7 @@ public:
                  const std::string& option_string)
     : t_oop_generator(program) {
     (void)option_string;
+    temporary_var = 0;
     std::map<std::string, std::string>::const_iterator iter;
 
     /* no options yet */
@@ -401,8 +402,8 @@ string t_st_generator::render_const_value(t_type* type, t_const_value* value) {
 
     const vector<t_field*>& fields = ((t_struct*)type)->get_members();
     vector<t_field*>::const_iterator f_iter;
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
-    map<t_const_value*, t_const_value*>::const_iterator v_iter;
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
+    map<t_const_value*, t_const_value*, t_const_value::value_compare>::const_iterator v_iter;
 
     for (v_iter = val.begin(); v_iter != val.end(); ++v_iter) {
       t_type* field_type = NULL;
@@ -427,8 +428,8 @@ string t_st_generator::render_const_value(t_type* type, t_const_value* value) {
     out << "(Dictionary new" << endl;
     indent_up();
     indent_up();
-    const map<t_const_value*, t_const_value*>& val = value->get_map();
-    map<t_const_value*, t_const_value*>::const_iterator v_iter;
+    const map<t_const_value*, t_const_value*, t_const_value::value_compare>& val = value->get_map();
+    map<t_const_value*, t_const_value*, t_const_value::value_compare>::const_iterator v_iter;
     for (v_iter = val.begin(); v_iter != val.end(); ++v_iter) {
       out << indent() << indent();
       out << "at: " << render_const_value(ktype, v_iter->first);

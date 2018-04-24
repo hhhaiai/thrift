@@ -19,8 +19,6 @@
 
 BUILT_SOURCES = gen-dart/tutorial/lib/tutorial.dart gen-dart/shared/lib/shared.dart
 
-THRIFT = $(top_builddir)/compiler/cpp/thrift
-
 gen-dart/tutorial/lib/tutorial.dart gen-dart/shared/lib/shared.dart: $(top_srcdir)/tutorial/tutorial.thrift
 	$(THRIFT) --gen dart -r $<
 
@@ -69,4 +67,7 @@ EXTRA_DIST = \
 	console_client/pubspec.yaml \
 	server/bin/main.dart \
 	server/pubspec.yaml \
+	console_client/.analysis_options \
+	client/.analysis_options \
+	server/.analysis_options \
 	build.sh
